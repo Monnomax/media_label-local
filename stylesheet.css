@@ -1,0 +1,22 @@
+.mpris-indicator-main-button {
+    -natural-hpadding: 0 !important;
+    -minimum-hpadding: 0 !important;
+    background-color: transparent !important;
+    box-shadow: none !important;
+    border: none !important;
+}
+
+.mpris-panel-button {
+    padding: 0 !important;
+    margin: 0 !important;
+    spacing: 6px;
+    background-color: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+
+.mpris-panel-button StLabel,
+.mpris-panel-button StBin,
+.mpris-panel-button StBoxLayout {
+    background-color: transparent !important;
+}
