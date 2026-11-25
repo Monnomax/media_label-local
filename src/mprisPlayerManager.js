@@ -31,7 +31,7 @@ export class MprisPlayerManager {
             "org.freedesktop.DBus",
             "/org/freedesktop/DBus",
             () => {
-                let [names] = this.dBusProxy.ListNamesSync();
+                const [names] = this.dBusProxy.ListNamesSync();
                 for (const name of names) {
                     if (name.startsWith("org.mpris.MediaPlayer2"))
                         this._addPlayer(name);
@@ -41,7 +41,7 @@ export class MprisPlayerManager {
 
         this._nameOwnerChangedSignalId = this.dBusProxy.connectSignal(
             "NameOwnerChanged",
-            (proxy, sender, [name, oldOwner, newOwner]) => {
+            (_proxy, _sender, [name, _oldOwner, newOwner]) => {
                 if (!name.startsWith("org.mpris.MediaPlayer2")) return;
 
                 if (newOwner && !this._players.has(name)) this._addPlayer(name);
@@ -69,38 +69,21 @@ export class MprisPlayerManager {
             "/org/mpris/MediaPlayer2",
             async () => {
                 if (this._isDestroyed || !this._players.has(address)) return;
+
                 await this._registerPlayerInFilters(address);
 
+                if (this._isDestroyed || !this._players.has(address)) return;
+
                 entry.lastActive = GLib.get_monotonic_time();
-
-                // Prefer the player belonging to the focused application,
-                // regardless of which player most recently emitted a change.
-                this._focusedPlayerAddress = this._findFocusedPlayerAddress();
-                if (this._focusedPlayerAddress) {
-                    if (this._focusedPlayerAddress === address)
-                        this._activate(address);
-                    else this._delegate.refreshVisibility();
-                    return;
-                }
-
-                const activeAddress = this._delegate.getActiveAddress();
-                if (!activeAddress || entry.proxy.PlaybackStatus === "Playing")
-                    this._activate(address);
-                else this._delegate.refreshVisibility();
+                this._syncActivePlayer(address);
             },
         );
 
         entry.propId = entry.proxy.connect("g-properties-changed", () => {
+            if (this._isDestroyed || !this._players.has(address)) return;
+
             entry.lastActive = GLib.get_monotonic_time();
-
-            if (this._focusedPlayerAddress) {
-                if (this._focusedPlayerAddress === address)
-                    this._activate(address);
-                else this._delegate.refreshVisibility();
-                return;
-            }
-
-            this._activate(address);
+            this._syncActivePlayer(address);
         });
     }
 
@@ -111,19 +94,7 @@ export class MprisPlayerManager {
         if (entry.propId && entry.proxy) entry.proxy.disconnect(entry.propId);
         this._players.delete(address);
 
-        const wasActive = this._delegate.getActiveAddress() === address;
-        this._focusedPlayerAddress = this._findFocusedPlayerAddress();
-
-        if (this._focusedPlayerAddress) {
-            if (this._delegate.getActiveAddress() !== this._focusedPlayerAddress)
-                this._activate(this._focusedPlayerAddress);
-            return;
-        }
-        if (!wasActive) return;
-
-        const next = this._pickNextActivePlayer();
-        if (next) this._activate(next);
-        else this._delegate.clearActivePlayer();
+        this._syncActivePlayer();
     }
 
     _scheduleFocusSync() {
@@ -146,8 +117,8 @@ export class MprisPlayerManager {
 
         let playingCandidate = null;
         let playingTime = -1;
-        let anyCandidate = null;
-        let anyTime = -1;
+        let pausedCandidate = null;
+        let pausedTime = -1;
 
         for (const [address, entry] of this._players) {
             if (
@@ -160,72 +131,100 @@ export class MprisPlayerManager {
             )
                 continue;
 
-            if (entry.lastActive > anyTime) {
-                anyTime = entry.lastActive;
-                anyCandidate = address;
-            }
+            const playbackStatus = entry.proxy.PlaybackStatus;
 
             if (
-                entry.proxy.PlaybackStatus === "Playing" &&
+                playbackStatus === "Playing" &&
                 entry.lastActive > playingTime
             ) {
                 playingTime = entry.lastActive;
                 playingCandidate = address;
+            } else if (
+                playbackStatus === "Paused" &&
+                entry.lastActive > pausedTime
+            ) {
+                pausedTime = entry.lastActive;
+                pausedCandidate = address;
             }
         }
 
-        return playingCandidate || anyCandidate;
-    }
-
-    _syncFocusedPlayer() {
-        if (this._isDestroyed) return;
-
-        const previousFocusedAddress = this._focusedPlayerAddress;
-        this._focusedPlayerAddress = this._findFocusedPlayerAddress();
-
-        if (this._focusedPlayerAddress) {
-            if (
-                this._delegate.getActiveAddress() !==
-                this._focusedPlayerAddress
-            )
-                this._activate(this._focusedPlayerAddress);
-            return;
-        }
-
-        // If focus moved to a non-player window, return to the normal MPRIS
-        // selection policy rather than leaving a stale focus lock in place.
-        if (previousFocusedAddress) {
-            const next = this._pickNextActivePlayer();
-            if (next) this._activate(next);
-            else if (this._delegate.getActiveAddress())
-                this._delegate.clearActivePlayer();
-        }
+        // A stopped browser/player must not claim focus over active playback.
+        return playingCandidate || pausedCandidate;
     }
 
     _pickNextActivePlayer() {
-        let playingCandidate = null,
-            playingTime = -1;
-        let anyCandidate = null,
-            anyTime = -1;
+        let playingCandidate = null;
+        let playingTime = -1;
+        let pausedCandidate = null;
+        let pausedTime = -1;
 
         for (const [address, entry] of this._players) {
             if (!entry.proxy) continue;
 
-            if (entry.lastActive > anyTime) {
-                anyTime = entry.lastActive;
-                anyCandidate = address;
-            }
+            const playbackStatus = entry.proxy.PlaybackStatus;
 
             if (
-                entry.proxy.PlaybackStatus === "Playing" &&
+                playbackStatus === "Playing" &&
                 entry.lastActive > playingTime
             ) {
                 playingTime = entry.lastActive;
                 playingCandidate = address;
+            } else if (
+                playbackStatus === "Paused" &&
+                entry.lastActive > pausedTime
+            ) {
+                pausedTime = entry.lastActive;
+                pausedCandidate = address;
             }
         }
 
-        return playingCandidate || anyCandidate;
+        // Prefer any playing session over every paused session.
+        // Stopped sessions are intentionally excluded.
+        return playingCandidate || pausedCandidate;
+    }
+
+    _selectPreferredPlayerAddress() {
+        this._focusedPlayerAddress = this._findFocusedPlayerAddress();
+
+        if (this._focusedPlayerAddress) {
+            const focusedEntry = this._players.get(
+                this._focusedPlayerAddress,
+            );
+
+            if (focusedEntry?.proxy?.PlaybackStatus === "Playing")
+                return this._focusedPlayerAddress;
+        }
+
+        const nextAddress = this._pickNextActivePlayer();
+        if (!nextAddress) return null;
+
+        const nextEntry = this._players.get(nextAddress);
+        if (nextEntry?.proxy?.PlaybackStatus === "Playing")
+            return nextAddress;
+
+        // When nothing is playing, retain the focused app's paused session.
+        return this._focusedPlayerAddress || nextAddress;
+    }
+
+    _syncActivePlayer(changedAddress = null) {
+        if (this._isDestroyed) return;
+
+        const nextAddress = this._selectPreferredPlayerAddress();
+        const activeAddress = this._delegate.getActiveAddress();
+
+        if (nextAddress) {
+            // Refresh metadata when the currently active player emitted a change.
+            if (nextAddress !== activeAddress || nextAddress === changedAddress)
+                this._activate(nextAddress);
+            return;
+        }
+
+        if (activeAddress) this._delegate.clearActivePlayer();
+        else this._delegate.refreshVisibility();
+    }
+
+    _syncFocusedPlayer() {
+        this._syncActivePlayer();
     }
 
     _activate(address) {
@@ -236,7 +235,7 @@ export class MprisPlayerManager {
 
     getAppIdentifier(address) {
         if (!address) return null;
-        let id = address.replace(/^org\.mpris\.MediaPlayer2\./, "");
+        const id = address.replace(/^org\.mpris\.MediaPlayer2\./, "");
         return id.split(".instance")[0];
     }
 
@@ -264,14 +263,14 @@ export class MprisPlayerManager {
             );
 
             if (result) {
-                let [variant] = result.recursiveUnpack();
+                const [variant] = result.recursiveUnpack();
                 identity = variant;
             }
 
             const entry = this._players.get(address);
             if (entry) entry.identity = String(identity ?? "");
 
-            let players = JSON.parse(
+            const players = JSON.parse(
                 this._settings.get_string("media-players"),
             );
 
@@ -343,7 +342,7 @@ export class MprisPlayerManager {
             if (!result) return null;
             const [variant] = result.recursiveUnpack();
             return Number(variant) || 0;
-        } catch (e) {
+        } catch (_e) {
             return null;
         }
     }
