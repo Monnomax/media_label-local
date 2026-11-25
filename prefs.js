@@ -320,6 +320,66 @@ export default class MprisLabelPreferences extends ExtensionPreferences {
             }
         });
 
+        const exclusivePlaybackGroup = new Adw.PreferencesGroup({
+            title: "Ексклюзивне відтворення",
+        });
+        page.add(exclusivePlaybackGroup);
+
+        const exclusivePlaybackRow = new Adw.SwitchRow({
+            title: "Відтворювати лише один плеєр",
+            subtitle:
+                "Під час запуску іншого плеєра Media Label призупиняє решту плеєрів, що відтворюють контент.",
+        });
+        settings.bind(
+            "exclusive-playback",
+            exclusivePlaybackRow,
+            "active",
+            Gio.SettingsBindFlags.DEFAULT,
+        );
+        exclusivePlaybackGroup.add(exclusivePlaybackRow);
+
+        const resumePreviousRow = new Adw.ActionRow({
+            title: "Після завершення іншого плеєра",
+            subtitle:
+                "Автоматично відновлювати лише плеєр, який Media Label сам поставив на паузу.",
+        });
+        const resumePreviousDropdown = new Gtk.DropDown({
+            model: Gtk.StringList.new([
+                "Залишити на паузі",
+                "Автоматично відновити",
+            ]),
+            selected: settings.get_boolean("exclusive-playback-auto-resume")
+                ? 1
+                : 0,
+            valign: Gtk.Align.CENTER,
+        });
+        resumePreviousRow.add_suffix(resumePreviousDropdown);
+        resumePreviousRow.activatable_widget = resumePreviousDropdown;
+        settings.bind(
+            "exclusive-playback",
+            resumePreviousRow,
+            "sensitive",
+            Gio.SettingsBindFlags.DEFAULT,
+        );
+        exclusivePlaybackGroup.add(resumePreviousRow);
+
+        resumePreviousDropdown.connect("notify::selected", () => {
+            const value = resumePreviousDropdown.selected === 1;
+            if (
+                settings.get_boolean("exclusive-playback-auto-resume") !== value
+            ) {
+                settings.set_boolean("exclusive-playback-auto-resume", value);
+            }
+        });
+
+        settings.connect("changed::exclusive-playback-auto-resume", () => {
+            const selected = settings.get_boolean("exclusive-playback-auto-resume")
+                ? 1
+                : 0;
+            if (resumePreviousDropdown.selected !== selected)
+                resumePreviousDropdown.selected = selected;
+        });
+
         const colorGroup = new Adw.PreferencesGroup({
             title: "Колір кнопки",
         });

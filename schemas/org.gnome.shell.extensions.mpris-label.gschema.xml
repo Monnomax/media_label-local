@@ -86,5 +86,13 @@
 			<default>"[]"</default>
 		</key>
 
+		<key name="exclusive-playback" type="b">
+			<default>false</default>
+		</key>
+
+		<key name="exclusive-playback-auto-resume" type="b">
+			<default>false</default>
+		</key>
+
 	</schema>
 </schemalist>

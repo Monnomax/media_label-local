@@ -3,6 +3,7 @@ import GLib from "gi://GLib";
 import Shell from "gi://Shell";
 import { matchesFocusedApplication } from "./focusedPlayerMatcher.js";
 import { MPRIS_INTERFACE, DBUS_INTERFACE } from "./dbusInterfaces.js";
+import { ExclusivePlaybackController } from "./exclusivePlaybackController.js";
 
 export class MprisPlayerManager {
     constructor(settings, delegate) {
@@ -13,6 +14,18 @@ export class MprisPlayerManager {
         this._nameOwnerChangedSignalId = null;
         this._focusedPlayerAddress = null;
         this._focusSyncIdleId = null;
+        this._exclusivePlayback = new ExclusivePlaybackController(
+            settings,
+            this._players,
+            (address, method) => this._sendPlaybackCommand(address, method),
+        );
+        this._exclusivePlaybackSettingsId = this._settings.connect(
+            "changed::exclusive-playback",
+            () => {
+                this._exclusivePlayback.onSettingsChanged();
+                this._syncActivePlayer();
+            },
+        );
 
         this._windowTracker = Shell.WindowTracker.get_default();
         this._focusAppChangedSignalId = this._windowTracker.connect(
@@ -60,6 +73,7 @@ export class MprisPlayerManager {
             propId: null,
             identity: "",
             lastActive: GLib.get_monotonic_time(),
+            lastPlaybackStatus: null,
         };
         this._players.set(address, entry);
 
@@ -74,6 +88,7 @@ export class MprisPlayerManager {
 
                 if (this._isDestroyed || !this._players.has(address)) return;
 
+                entry.lastPlaybackStatus = entry.proxy.PlaybackStatus;
                 entry.lastActive = GLib.get_monotonic_time();
                 this._syncActivePlayer(address);
             },
@@ -81,6 +96,15 @@ export class MprisPlayerManager {
 
         entry.propId = entry.proxy.connect("g-properties-changed", () => {
             if (this._isDestroyed || !this._players.has(address)) return;
+
+            const previousStatus = entry.lastPlaybackStatus;
+            const currentStatus = entry.proxy.PlaybackStatus;
+            entry.lastPlaybackStatus = currentStatus;
+            this._exclusivePlayback.onPlaybackStatusChanged(
+                address,
+                previousStatus,
+                currentStatus,
+            );
 
             entry.lastActive = GLib.get_monotonic_time();
             this._syncActivePlayer(address);
@@ -91,8 +115,10 @@ export class MprisPlayerManager {
         const entry = this._players.get(address);
         if (!entry) return;
 
+        const wasPlaying = entry.proxy?.PlaybackStatus === "Playing";
         if (entry.propId && entry.proxy) entry.proxy.disconnect(entry.propId);
         this._players.delete(address);
+        this._exclusivePlayback.onPlayerRemoved(address, wasPlaying);
 
         this._syncActivePlayer();
     }
@@ -210,6 +236,9 @@ export class MprisPlayerManager {
         if (this._isDestroyed) return;
 
         const nextAddress = this._selectPreferredPlayerAddress();
+        const nextEntry = nextAddress ? this._players.get(nextAddress) : null;
+        if (nextEntry?.proxy?.PlaybackStatus === "Playing")
+            this._exclusivePlayback.enforce(nextAddress);
         const activeAddress = this._delegate.getActiveAddress();
 
         if (nextAddress) {
@@ -225,6 +254,30 @@ export class MprisPlayerManager {
 
     _syncFocusedPlayer() {
         this._syncActivePlayer();
+    }
+
+    _sendPlaybackCommand(address, method) {
+        return new Promise((resolve, reject) => {
+            Gio.DBus.session.call(
+                address,
+                "/org/mpris/MediaPlayer2",
+                "org.mpris.MediaPlayer2.Player",
+                method,
+                null,
+                null,
+                Gio.DBusCallFlags.NONE,
+                -1,
+                null,
+                (connection, result) => {
+                    try {
+                        connection.call_finish(result);
+                        resolve();
+                    } catch (error) {
+                        reject(error);
+                    }
+                },
+            );
+        });
     }
 
     _activate(address) {
@@ -362,6 +415,12 @@ export class MprisPlayerManager {
         }
         this._windowTracker = null;
         this._focusedPlayerAddress = null;
+        if (this._exclusivePlaybackSettingsId) {
+            this._settings.disconnect(this._exclusivePlaybackSettingsId);
+            this._exclusivePlaybackSettingsId = null;
+        }
+        this._exclusivePlayback?.destroy();
+        this._exclusivePlayback = null;
 
         if (this.dBusProxy && this._nameOwnerChangedSignalId) {
             this.dBusProxy.disconnectSignal(this._nameOwnerChangedSignalId);
