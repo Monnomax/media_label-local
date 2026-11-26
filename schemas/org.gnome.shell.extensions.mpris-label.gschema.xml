@@ -94,5 +94,22 @@
 			<default>false</default>
 		</key>
 
+
+		<key name="preview-blur-radius" type="i">
+			<default>30</default>
+		</key>
+
+		<key name="preview-grain-strength" type="i">
+			<default>24</default>
+		</key>
+
+
+		<key name="preview-edge-margin" type="i">
+			<default>50</default>
+		</key>
+
+		<key name="preview-corner-radius" type="i">
+			<default>25</default>
+		</key>
 	</schema>
 </schemalist>

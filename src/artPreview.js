@@ -4,6 +4,9 @@ import GObject from "gi://GObject";
 import GLib from "gi://GLib";
 import Gio from "gi://Gio";
 import GdkPixbuf from "gi://GdkPixbuf";
+import Gdk from "gi://Gdk";
+import Cairo from "gi://cairo";
+import Shell from "gi://Shell";
 import * as Main from "resource:///org/gnome/shell/ui/main.js";
 import {
     buildArtworkCandidates,
@@ -32,6 +35,36 @@ export const ArtPreview = GObject.registerClass(
 
             Main.uiGroup.add_child(this);
 
+            // A separate sibling captures the already-composited content beneath
+            // the preview. The artwork and dimming scrim stay above this layer.
+            this._backdropBlurLayer = new St.Widget({
+                name: "art-preview-backdrop-blur-layer",
+                reactive: false,
+                x: 0,
+                y: 0,
+                width: Math.max(1, global.stage.width),
+                height: Math.max(1, global.stage.height),
+            });
+            this._backdropBlurLayer.add_constraint(
+                new Clutter.BindConstraint({
+                    source: global.stage,
+                    coordinate: Clutter.BindCoordinate.ALL,
+                }),
+            );
+
+            this._backdropBlurEffect = new Shell.BlurEffect({
+                brightness: 0.88,
+                radius: this._settings
+                    ? this._settings.get_int("preview-blur-radius")
+                    : 30,
+                mode: Shell.BlurMode.BACKGROUND,
+            });
+            this._backdropBlurLayer.add_effect_with_name(
+                "art-preview-backdrop-blur",
+                this._backdropBlurEffect,
+            );
+            Main.uiGroup.insert_child_below(this._backdropBlurLayer, this);
+
             this.add_constraint(
                 new Clutter.BindConstraint({
                     source: global.stage,
@@ -42,11 +75,76 @@ export const ArtPreview = GObject.registerClass(
             this.layout_manager = new Clutter.BinLayout();
 
             this._background = new St.Widget({
-                style: "background-color: rgba(0,0,0,0.8);",
+                style: "background-color: rgba(0,0,0,0.5);",
+                x_align: Clutter.ActorAlign.FILL,
+                y_align: Clutter.ActorAlign.FILL,
                 x_expand: true,
                 y_expand: true,
             });
             this.add_child(this._background);
+
+            // Film-grain texture is loaded from a generated PNG. Paint it in
+            // explicit tiles so it does not depend on Cairo pattern extensions.
+            const grainTexturePath = '/home/monnomax/.cache/media-label/art-preview-grain.png';
+            try {
+                this._grainPixbuf = GdkPixbuf.Pixbuf.new_from_file(
+                    grainTexturePath,
+                );
+            } catch (error) {
+                this._grainPixbuf = null;
+                logError(error, "Media Label: не вдалося завантажити текстуру зернистості");
+            }
+
+            this._grainLayer = new St.DrawingArea({
+                name: "art-preview-grain-layer",
+                reactive: false,
+                x_align: Clutter.ActorAlign.FILL,
+                y_align: Clutter.ActorAlign.FILL,
+                x_expand: true,
+                y_expand: true,
+            });
+            this._grainLayer.connect("repaint", (area) => {
+                const cr = area.get_context();
+                try {
+                    const [width, height] = area.get_surface_size();
+                    cr.setOperator(Cairo.Operator.CLEAR);
+                    cr.paint();
+                    cr.setOperator(Cairo.Operator.OVER);
+
+                    const pixbuf = this._grainPixbuf;
+                    if (!pixbuf || width <= 0 || height <= 0) return;
+
+                    const tileWidth = pixbuf.get_width();
+                    const tileHeight = pixbuf.get_height();
+                    for (let y = 0; y < height; y += tileHeight) {
+                        for (let x = 0; x < width; x += tileWidth) {
+                            cr.save();
+                            cr.rectangle(
+                                x,
+                                y,
+                                Math.min(tileWidth, width - x),
+                                Math.min(tileHeight, height - y),
+                            );
+                            cr.clip();
+                            Gdk.cairo_set_source_pixbuf(cr, pixbuf, x, y);
+                            cr.paintWithAlpha(
+                        (this._settings
+                            ? this._settings.get_int("preview-grain-strength")
+                            : 24) / 100,
+                    );
+                            cr.restore();
+                        }
+                    }
+                } catch (error) {
+                    if (!this._grainErrorLogged) {
+                        this._grainErrorLogged = true;
+                        logError(error, "Media Label: помилка малювання зернистості");
+                    }
+                } finally {
+                    cr.$dispose();
+                }
+            });
+            this.add_child(this._grainLayer);
 
             let imgW = 560;
             let imgH = 560;
@@ -62,7 +160,11 @@ export const ArtPreview = GObject.registerClass(
                     background-size: contain;
                     background-repeat: no-repeat;
                     background-position: center;
-                    border-radius: 24px;
+                    border-radius: ${
+                        this._settings
+                            ? this._settings.get_int("preview-corner-radius")
+                            : 24
+                    }px;
                 `,
             });
             this.add_child(this._image);
@@ -140,8 +242,17 @@ export const ArtPreview = GObject.registerClass(
                 1,
                 (monitor && monitor.height) || global.stage.height || 768,
             );
+            const previewEdgeMargin = this._settings
+                ? this._settings.get_int("preview-edge-margin")
+                : 50;
             const fitToScreen = (width, height) =>
-                fitArtworkToScreen(width, height, stageWidth, stageHeight);
+                fitArtworkToScreen(
+                    width,
+                    height,
+                    stageWidth,
+                    stageHeight,
+                    previewEdgeMargin,
+                );
 
             const trimArtworkCache = (cacheDir, protectedPath) => {
                 try {
@@ -270,7 +381,11 @@ export const ArtPreview = GObject.registerClass(
                     background-size: contain;
                     background-repeat: no-repeat;
                     background-position: center;
-                    border-radius: 24px;
+                    border-radius: ${
+                        this._settings
+                            ? this._settings.get_int("preview-corner-radius")
+                            : 24
+                    }px;
                 `);
                 const size = fitToScreen(artwork.width, artwork.height);
                 this._image.set_size(size.width, size.height);
@@ -511,6 +626,22 @@ export const ArtPreview = GObject.registerClass(
         }
 
         destroy() {
+            if (this._grainLayer) {
+                this._grainLayer.destroy();
+                this._grainLayer = null;
+            }
+            this._grainPixbuf = null;
+            this._grainErrorLogged = false;
+            if (this._backdropBlurLayer) {
+                if (this._backdropBlurEffect) {
+                    this._backdropBlurLayer.remove_effect(
+                        this._backdropBlurEffect,
+                    );
+                    this._backdropBlurEffect = null;
+                }
+                this._backdropBlurLayer.destroy();
+                this._backdropBlurLayer = null;
+            }
             if (this._handlerId) {
                 global.stage.disconnect(this._handlerId);
             }

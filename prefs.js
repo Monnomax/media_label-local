@@ -858,6 +858,69 @@ export default class MprisLabelPreferences extends ExtensionPreferences {
         delayRow.add_suffix(delayButton);
         autocloseGroup.add(delayRow);
 
+        const previewEffectsGroup = new Adw.PreferencesGroup({
+            title: "Ефекти тла",
+        });
+        previewEffectsGroup.set_name("preview-effects-group");
+        previewPage.add(previewEffectsGroup);
+
+        const blurEffectRow = new Adw.ActionRow({
+            title: "Розмиття",
+            subtitle: "Радіус розмиття у px; 0 — вимкнено, максимум — 60 px. Прокручуй колесико над кнопкою.",
+        });
+        const blurEffectButton = createNumericButton("preview-blur-radius", {
+            lower: 0,
+            upper: 60,
+            step_increment: 1,
+        });
+        blurEffectRow.add_suffix(blurEffectButton);
+        blurEffectRow.activatable_widget = blurEffectButton;
+        previewEffectsGroup.add(blurEffectRow);
+
+        const grainEffectRow = new Adw.ActionRow({
+            title: "Зернистість",
+            subtitle: "Інтенсивність у відсотках; 0 — вимкнено, максимум — 50%. Прокручуй колесико над кнопкою.",
+        });
+        const grainEffectButton = createNumericButton("preview-grain-strength", {
+            lower: 0,
+            upper: 50,
+            step_increment: 1,
+        });
+        grainEffectRow.add_suffix(grainEffectButton);
+        grainEffectRow.activatable_widget = grainEffectButton;
+        previewEffectsGroup.add(grainEffectRow);
+
+        const previewLayoutGroup = new Adw.PreferencesGroup({
+            title: "Налаштування прев'ю",
+        });
+        previewPage.add(previewLayoutGroup);
+
+        const previewMarginRow = new Adw.ActionRow({
+            title: "Відступ від краю монітора",
+            subtitle: "Відстань від країв монітора до максимальної межі обкладинки, у px.",
+        });
+        const previewMarginButton = createNumericButton("preview-edge-margin", {
+            lower: 0,
+            upper: 100,
+            step_increment: 5,
+        });
+        previewMarginRow.add_suffix(previewMarginButton);
+        previewMarginRow.activatable_widget = previewMarginButton;
+        previewLayoutGroup.add(previewMarginRow);
+
+        const previewCornerRadiusRow = new Adw.ActionRow({
+            title: "Радіус кутів",
+            subtitle: "Заокруглення кутів великої обкладинки, у px.",
+        });
+        const previewCornerRadiusButton = createNumericButton("preview-corner-radius", {
+            lower: 0,
+            upper: 50,
+            step_increment: 5,
+        });
+        previewCornerRadiusRow.add_suffix(previewCornerRadiusButton);
+        previewCornerRadiusRow.activatable_widget = previewCornerRadiusButton;
+        previewLayoutGroup.add(previewCornerRadiusRow);
+
         const controlsPage = getControlsPage(settings);
         window.add(controlsPage);
 
