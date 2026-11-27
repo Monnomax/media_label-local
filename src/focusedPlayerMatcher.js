@@ -31,7 +31,11 @@ function identifierTokens(value) {
         .filter((part) => part.length >= 3 && !IGNORED_TOKENS.has(part));
 }
 
-export function matchesFocusedApplication(focusedAppId, playerAddress, identity = "") {
+export function matchesFocusedApplication(
+    focusedAppId,
+    playerAddress,
+    identity = "",
+) {
     const focusedId = normalizeIdentifier(focusedAppId);
     if (!focusedId) return false;
 

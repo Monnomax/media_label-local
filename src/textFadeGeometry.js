@@ -1,4 +1,3 @@
-// Pure geometry helper: decides which viewport edges hide part of a long title.
 export function getTextFadeState(
     translationX,
     textWidth,

@@ -61,7 +61,6 @@ export function paintPanelProgress(
         const height = Math.max(0, Math.round(area.height));
         if (height <= 0) return;
 
-        // Align the progress fill with the allocated DrawingArea width.
         const rawDrawingWidth = Number(area.width);
         const drawingWidth = Math.max(
             0,

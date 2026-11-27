@@ -126,7 +126,6 @@ export class MprisPlayerManager {
     _scheduleFocusSync() {
         if (this._isDestroyed || this._focusSyncIdleId) return;
 
-        // Coalesce transient focus-app changes emitted during one focus switch.
         this._focusSyncIdleId = GLib.idle_add(
             GLib.PRIORITY_DEFAULT_IDLE,
             () => {
@@ -174,7 +173,6 @@ export class MprisPlayerManager {
             }
         }
 
-        // A stopped browser/player must not claim focus over active playback.
         return playingCandidate || pausedCandidate;
     }
 
@@ -204,8 +202,6 @@ export class MprisPlayerManager {
             }
         }
 
-        // Prefer any playing session over every paused session.
-        // Stopped sessions are intentionally excluded.
         return playingCandidate || pausedCandidate;
     }
 
@@ -213,9 +209,7 @@ export class MprisPlayerManager {
         this._focusedPlayerAddress = this._findFocusedPlayerAddress();
 
         if (this._focusedPlayerAddress) {
-            const focusedEntry = this._players.get(
-                this._focusedPlayerAddress,
-            );
+            const focusedEntry = this._players.get(this._focusedPlayerAddress);
 
             if (focusedEntry?.proxy?.PlaybackStatus === "Playing")
                 return this._focusedPlayerAddress;
@@ -225,10 +219,8 @@ export class MprisPlayerManager {
         if (!nextAddress) return null;
 
         const nextEntry = this._players.get(nextAddress);
-        if (nextEntry?.proxy?.PlaybackStatus === "Playing")
-            return nextAddress;
+        if (nextEntry?.proxy?.PlaybackStatus === "Playing") return nextAddress;
 
-        // When nothing is playing, retain the focused app's paused session.
         return this._focusedPlayerAddress || nextAddress;
     }
 
@@ -242,7 +234,6 @@ export class MprisPlayerManager {
         const activeAddress = this._delegate.getActiveAddress();
 
         if (nextAddress) {
-            // Refresh metadata when the currently active player emitted a change.
             if (nextAddress !== activeAddress || nextAddress === changedAddress)
                 this._activate(nextAddress);
             return;

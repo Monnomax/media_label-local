@@ -42,7 +42,6 @@ export function updateMetadata() {
             this._detailedWindow.updateInfo(metadata, appId);
         }
 
-
         this._seekLength = getTrackLength(metadata);
         this._updatePanelProgressFill(
             this._panelProgressPosition,

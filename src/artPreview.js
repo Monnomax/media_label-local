@@ -35,8 +35,6 @@ export const ArtPreview = GObject.registerClass(
 
             Main.uiGroup.add_child(this);
 
-            // A separate sibling captures the already-composited content beneath
-            // the preview. The artwork and dimming scrim stay above this layer.
             this._backdropBlurLayer = new St.Widget({
                 name: "art-preview-backdrop-blur-layer",
                 reactive: false,
@@ -83,16 +81,17 @@ export const ArtPreview = GObject.registerClass(
             });
             this.add_child(this._background);
 
-            // Film-grain texture is loaded from a generated PNG. Paint it in
-            // explicit tiles so it does not depend on Cairo pattern extensions.
-            const grainTexturePath = '/home/monnomax/.cache/media-label/art-preview-grain.png';
+            const grainTexturePath =
+                "/home/monnomax/.cache/media-label/art-preview-grain.png";
             try {
-                this._grainPixbuf = GdkPixbuf.Pixbuf.new_from_file(
-                    grainTexturePath,
-                );
+                this._grainPixbuf =
+                    GdkPixbuf.Pixbuf.new_from_file(grainTexturePath);
             } catch (error) {
                 this._grainPixbuf = null;
-                logError(error, "Media Label: не вдалося завантажити текстуру зернистості");
+                logError(
+                    error,
+                    "Media Label: не вдалося завантажити текстуру зернистості",
+                );
             }
 
             this._grainLayer = new St.DrawingArea({
@@ -128,17 +127,22 @@ export const ArtPreview = GObject.registerClass(
                             cr.clip();
                             Gdk.cairo_set_source_pixbuf(cr, pixbuf, x, y);
                             cr.paintWithAlpha(
-                        (this._settings
-                            ? this._settings.get_int("preview-grain-strength")
-                            : 24) / 100,
-                    );
+                                (this._settings
+                                    ? this._settings.get_int(
+                                          "preview-grain-strength",
+                                      )
+                                    : 24) / 100,
+                            );
                             cr.restore();
                         }
                     }
                 } catch (error) {
                     if (!this._grainErrorLogged) {
                         this._grainErrorLogged = true;
-                        logError(error, "Media Label: помилка малювання зернистості");
+                        logError(
+                            error,
+                            "Media Label: помилка малювання зернистості",
+                        );
                     }
                 } finally {
                     cr.$dispose();
@@ -149,7 +153,6 @@ export const ArtPreview = GObject.registerClass(
             let imgW = 560;
             let imgH = 560;
 
-            // Картинка
             this._image = new St.Widget({
                 x_align: Clutter.ActorAlign.CENTER,
                 y_align: Clutter.ActorAlign.CENTER,

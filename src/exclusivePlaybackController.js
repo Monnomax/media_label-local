@@ -1,8 +1,3 @@
-/**
- * Enforces one active MPRIS playback session.
- * Commands are provided by MprisPlayerManager so this policy stays testable
- * without GNOME Shell or D-Bus.
- */
 export class ExclusivePlaybackController {
     constructor(settings, players, sendCommand) {
         this._settings = settings;
@@ -29,8 +24,7 @@ export class ExclusivePlaybackController {
         if (!this._isEnabled()) return;
 
         const winner = this._players.get(playingAddress);
-        if (!winner?.proxy || winner.proxy.PlaybackStatus !== "Playing")
-            return;
+        if (!winner?.proxy || winner.proxy.PlaybackStatus !== "Playing") return;
 
         for (const [address, entry] of this._players) {
             if (address === playingAddress || !entry.proxy) continue;
@@ -62,15 +56,15 @@ export class ExclusivePlaybackController {
             if (this._pausedByUs.get(address) === record)
                 this._pausedByUs.delete(address);
             if (typeof log === "function")
-                log(`Media Label: не вдалося призупинити ${address}: ${error.message}`);
+                log(
+                    `Media Label: не вдалося призупинити ${address}: ${error.message}`,
+                );
             if (this._resumeRequested) this._resumePreviousIfPossible();
         }
     }
 
     onPlaybackStatusChanged(address, previousStatus, currentStatus) {
         if (currentStatus === "Playing") {
-            // The user or another application resumed this player. It is no
-            // longer eligible for automatic restoration by this controller.
             this._pausedByUs.delete(address);
             this._resumeRequested = false;
             return;
@@ -91,7 +85,6 @@ export class ExclusivePlaybackController {
     }
 
     onSettingsChanged() {
-        // Disabling exclusive playback must not unexpectedly start audio.
         if (!this._isEnabled()) {
             this._pausedByUs.clear();
             this._resumeRequested = false;
@@ -136,7 +129,6 @@ export class ExclusivePlaybackController {
                 continue;
             }
 
-            // Wait for the Pause method to complete before issuing Play.
             if (record.pending || !record.confirmed) return;
 
             if (proxy.CanPlay === false) {
@@ -153,14 +145,17 @@ export class ExclusivePlaybackController {
             } catch (error) {
                 if (
                     this._isEnabled() &&
-                    this._players.get(address)?.proxy?.PlaybackStatus === "Paused"
+                    this._players.get(address)?.proxy?.PlaybackStatus ===
+                        "Paused"
                 ) {
                     this._pausedByUs.set(address, record);
                     this._resumeRequested = true;
                 }
                 this._resumeRequested = false;
                 if (typeof log === "function")
-                    log(`Media Label: не вдалося відновити ${address}: ${error.message}`);
+                    log(
+                        `Media Label: не вдалося відновити ${address}: ${error.message}`,
+                    );
             } finally {
                 this._resumeInFlight = false;
                 if (this._resumeRequested) this._resumePreviousIfPossible();

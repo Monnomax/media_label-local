@@ -21,7 +21,7 @@ export const TrackLabel = GObject.registerClass(
             });
 
             this._indicator = indicator;
-            this._isDestroyed = false; // Прапорець для відстеження життєвого циклу
+            this._isDestroyed = false;
 
             this._label = new St.Label({
                 text: "Очікування...",
@@ -31,14 +31,15 @@ export const TrackLabel = GObject.registerClass(
             this._label.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
             this.add_child(this._label);
 
-            // Маска застосовується до контейнера тексту, а не до всієї кнопки.
             this._fadeEffect = null;
             try {
                 this._fadeEffect = new TextFadeEffect();
                 this._fadeEffect.set_enabled(false);
                 this.add_effect(this._fadeEffect);
             } catch (e) {
-                console.warn(`Media Label: text fade shader unavailable: ${e.message}`);
+                console.warn(
+                    `Media Label: text fade shader unavailable: ${e.message}`,
+                );
                 this._fadeEffect = null;
             }
 

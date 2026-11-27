@@ -60,7 +60,11 @@ export const TextFadeEffect = GObject.registerClass(
             return true;
         }
 
-        setFade(leftEnabled, rightEnabled, fadeWidthPx = DEFAULT_FADE_WIDTH_PX) {
+        setFade(
+            leftEnabled,
+            rightEnabled,
+            fadeWidthPx = DEFAULT_FADE_WIDTH_PX,
+        ) {
             const actorWidth = this.actor?.get_width?.() ?? 0;
             const normalizedWidth =
                 actorWidth > 0
