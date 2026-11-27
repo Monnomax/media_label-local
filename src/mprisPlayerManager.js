@@ -39,7 +39,7 @@ export class MprisPlayerManager {
     _initDBus() {
         const dBusProxyWrapper = Gio.DBusProxy.makeProxyWrapper(DBUS_INTERFACE);
 
-        this.dBusProxy = dBusProxyWrapper(
+        this.dBusProxy = new dBusProxyWrapper(
             Gio.DBus.session,
             "org.freedesktop.DBus",
             "/org/freedesktop/DBus",
@@ -77,7 +77,7 @@ export class MprisPlayerManager {
         };
         this._players.set(address, entry);
 
-        entry.proxy = proxyWrapper(
+        entry.proxy = new proxyWrapper(
             Gio.DBus.session,
             address,
             "/org/mpris/MediaPlayer2",
