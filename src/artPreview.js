@@ -301,7 +301,6 @@ export const ArtPreview = GObject.registerClass(
                 const checksum = GLib.compute_checksum_for_data(
                     GLib.ChecksumType.SHA256,
                     contents,
-                    contents.length,
                 );
                 const withoutQuery = candidate.split(/[?#]/, 1)[0];
                 const extensionMatch = withoutQuery.match(
